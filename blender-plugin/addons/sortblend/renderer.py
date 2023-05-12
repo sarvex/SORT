@@ -41,14 +41,12 @@ def dipslay_update(sock, render_engine):
             if time_stop - time_start > time_out:
                 log('Can not accept connection!')
                 return
-            pass
-
     while render_engine.terminating_display_thread is False:
         try:
             header_bytes = connection.recv(4)
             if header_bytes == b'':
                 break
-            
+
             pkg_length = int.from_bytes(header_bytes, "little")
             header = connection.recv(16)
             if header == b'':
@@ -56,7 +54,7 @@ def dipslay_update(sock, render_engine):
                 break
 
             # update a proportion of the image
-            tile_width  = int.from_bytes(header[0:3], "little")
+            tile_width = int.from_bytes(header[:3], "little")
             tile_height = int.from_bytes(header[4:7], "little")
             offset_x    = int.from_bytes(header[8:11], "little")
             offset_y    = int.from_bytes(header[12:15], "little")
@@ -86,7 +84,7 @@ def dipslay_update(sock, render_engine):
             log('socket error\t ')
             log(e)
             break
-    
+
     log('Socket disconnected from SORT.')
     connection.close()
 
@@ -112,7 +110,7 @@ class SORTRenderEngine(bpy.types.RenderEngine):
 
     def __init__(self):
         self.sort_available = True
-        
+
         self.image_size_w = int(bpy.data.scenes[0].render.resolution_x * bpy.data.scenes[0].render.resolution_percentage / 100)
         self.image_size_h = int(bpy.data.scenes[0].render.resolution_y * bpy.data.scenes[0].render.resolution_percentage / 100)
 
@@ -138,8 +136,6 @@ class SORTRenderEngine(bpy.types.RenderEngine):
                     if time_stop - time_start > time_out:
                         log('Can not bind the socket!')
                         return
-                    pass
-
             # listen for socket connection
             self.sock.settimeout(5)
             self.sock.listen()
@@ -155,10 +151,10 @@ class SORTRenderEngine(bpy.types.RenderEngine):
             if sort_bin_path is None:
                 raise Exception("Set the path where binary for SORT is located before rendering anything.")
             elif not os.path.exists(sort_bin_path):
-                raise Exception("SORT not found here: %s"%sort_bin_path)
+                raise Exception(f"SORT not found here: {sort_bin_path}")
         except Exception as exc:
             self.sort_available = False
-            self.report({'ERROR'},'%s' % exc)
+            self.report({'ERROR'}, f'{exc}')
 
         if not self.sort_available:
             return
@@ -179,10 +175,12 @@ class SORTRenderEngine(bpy.types.RenderEngine):
         intermediate_dir = exporter.get_intermediate_dir()
 
         # execute binary
-        cmd_argument = [binary_path];
-        cmd_argument.append( '--input:' + intermediate_dir + 'scene.sort')
-        cmd_argument.append( "--displayserver:" + self.ip_addr + ":" + str(self.port))
-        cmd_argument.append( '--blendermode' )
+        cmd_argument = [
+            binary_path,
+            f'--input:{intermediate_dir}scene.sort',
+            f"--displayserver:{self.ip_addr}:{str(self.port)}",
+            '--blendermode',
+        ];
         if scene.sort_data.profilingEnabled is True:
             cmd_argument.append( '--profiling:on' )
         if scene.sort_data.allUseDefaultMaterial is True:

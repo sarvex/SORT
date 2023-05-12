@@ -45,10 +45,8 @@ class LIGHT_PT_SORTPanel(SORTLightPanel, bpy.types.Panel):
         elif type == 'AREA':
             shape = light.shape
             self.layout.prop( light , 'shape' )
-            if shape == 'SQUARE':
-                self.layout.prop( light , "size" )
-            elif shape == 'RECTANGLE':
+            if shape == 'RECTANGLE':
                 self.layout.prop( light , "size" )
                 self.layout.prop( light , "size_y" )
-            elif shape == 'DISK':
+            elif shape in ['SQUARE', 'DISK']:
                 self.layout.prop( light , "size" )

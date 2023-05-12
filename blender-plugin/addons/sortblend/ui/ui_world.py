@@ -21,7 +21,7 @@ preview_collections = {}
 @base.register_class
 class SORTHDRSky(bpy.types.PropertyGroup):
     def generate_preview(self, context):
-        name = self.name + '_' + self.id_data.name
+        name = f'{self.name}_{self.id_data.name}'
         if name not in preview_collections:
             item = bpy.utils.previews.new()
             item.previews = ()
@@ -30,8 +30,7 @@ class SORTHDRSky(bpy.types.PropertyGroup):
         item = preview_collections[name]
         wm = context.window_manager
         enum_items = []
-        img = self.hdr_image
-        if img:
+        if img := self.hdr_image:
             new_image_name = img.name
             if item.image_name == new_image_name:
                 return item.previews

@@ -108,7 +108,7 @@ def generate():
         return
 
     # output some log
-    print('Generating file ' + target_filename + '.')
+    print(f'Generating file {target_filename}.')
 
     # open the file to be written
     f = open(target_filename, "w")
@@ -165,7 +165,7 @@ def generate():
 
     # helper function to generate the lut, this code will be reused a few of times
     def generate_lut(f, sample_cnt, monte_carlo_sample_cnt, ns, with_fresnel):
-        f.write('namespace ' + ns + '{\n')
+        f.write(f'namespace {ns}' + '{\n')
         f.write('constexpr int sample_cnt = {};\n\n'.format(sample_cnt))
         f.write('// Hemispherical-directional reflectance\n')
         f.write('static float g_ms_E[] = {')

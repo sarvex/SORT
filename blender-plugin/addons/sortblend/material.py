@@ -68,9 +68,21 @@ class SORTShaderNodeTree(bpy.types.NodeTree):
             cid = 'SORT_' + c.replace(' ', '').upper()
             items = [nodeitems_utils.NodeItem(nc.__name__) for nc in l]
             cats.append(SORTPatternNodeCategory(cid, c, items=items))
-        cats.append(SORTPatternNodeCategory('SORT_LAYOUT', 'Layout', items=[nodeitems_utils.NodeItem('NodeFrame'),nodeitems_utils.NodeItem('NodeReroute')]))
-        cats.append(SORTPatternNodeCategory('SORT_Group', 'Group', items=sort_node_group_items))
-
+        cats.extend(
+            (
+                SORTPatternNodeCategory(
+                    'SORT_LAYOUT',
+                    'Layout',
+                    items=[
+                        nodeitems_utils.NodeItem('NodeFrame'),
+                        nodeitems_utils.NodeItem('NodeReroute'),
+                    ],
+                ),
+                SORTPatternNodeCategory(
+                    'SORT_Group', 'Group', items=sort_node_group_items
+                ),
+            )
+        )
         nodeitems_utils.register_node_categories('SHADER_NODES_SORT', cats)
 
     @classmethod
@@ -129,10 +141,7 @@ def instances(tree):
         all_trees.append(t)
 
     for t in all_trees:
-        for node in t.nodes:
-            if is_node_group_id(tree, node.bl_idname):
-                res.append(node)
-
+        res.extend(node for node in t.nodes if is_node_group_id(tree, node.bl_idname))
     return res
 
 def is_sort_node_group(ng):
@@ -185,11 +194,7 @@ def getUniqueSocketName(socket_names, socket_name):
     i = 0
     new_socket_name = socket_name
     while True:
-        found_duplication = False
-        for name in socket_names:
-            if name == new_socket_name:
-                found_duplication = True
-
+        found_duplication = any(name == new_socket_name for name in socket_names)
         if found_duplication:
             new_socket_name = socket_name + str( i )
             i += 1
@@ -244,16 +249,14 @@ def get_other_socket(socket):
     for link in socket.links:
         other = link.from_socket if not socket.is_output else link.to_socket
 
-        # special handling for reroute node
-        if other.node.bl_idname == 'NodeReroute':
-            sockets = other.node.inputs if not socket.is_output else other.node.outputs
-            ret = None
-            for socket in sockets:
-                ret = get_other_socket( socket )
-            if ret is not None:
-                return ret
-        else:
+        if other.node.bl_idname != 'NodeReroute':
             return other
+        sockets = other.node.inputs if not socket.is_output else other.node.outputs
+        ret = None
+        for socket in sockets:
+            ret = get_other_socket( socket )
+        if ret is not None:
+            return ret
     return None
 
 def get_socket_data(socket):
@@ -262,16 +265,14 @@ def get_socket_data(socket):
         socket = get_other_socket(socket)
     # this could happen when connecting socket from group input/output node or shader group input node to a reroute node connects nothing
     # in which case there will be no way to deduce the type and name of the newly created socket.
-    if socket is None:
-        return '' , ''
-    return socket.name, socket.bl_idname
+    return ('', '') if socket is None else (socket.name, socket.bl_idname)
 
 def generate_inputs(tree):
     in_socket = []
     input_node = tree.nodes.get("Group Inputs")
     existed_name = []
     if input_node:
-        for idx, socket in enumerate(input_node.outputs):
+        for socket in input_node.outputs:
             if socket.is_linked:
                 socket_name, socket_bl_idname = get_socket_data(socket)
                 if socket_name == '':
@@ -301,6 +302,7 @@ def generate_outputs(tree):
 # this is a very important helper function, every time the node interface is changed
 # it is necessary to call this function to make it registered so that data is consistant
 def update_cls(tree):
+
     class C(SORTGroupNode):
         bl_idname = tree.sort_data.group_name_id
         bl_label = 'SORT Group'
@@ -311,9 +313,7 @@ def update_cls(tree):
         def getGroupTree(cls):
             return get_node_groups_by_id(cls.bl_idname)
 
-    # re-register the class
-    old_cls_ref = getattr(bpy.types, C.bl_idname, None)
-    if old_cls_ref:
+    if old_cls_ref := getattr(bpy.types, C.bl_idname, None):
         bpy.utils.unregister_class(old_cls_ref)
     bpy.utils.register_class(C)
 
@@ -445,9 +445,10 @@ class SORTNodeSocket:
     # this is not an inherited function
     def draw_label(self, context, layout, node, text):
         source_socket = get_from_socket(self)
-        has_error = False
-        if source_socket is not None and source_socket.get_socket_data_type() != self.get_socket_data_type():
-            has_error = True
+        has_error = (
+            source_socket is not None
+            and source_socket.get_socket_data_type() != self.get_socket_data_type()
+        )
         if has_error:
             layout.label(text=text,icon='CANCEL')
         else:
@@ -824,7 +825,7 @@ class SORT_Node_Group_Make_Operator(bpy.types.Operator):
 
         tree = context.space_data.edit_tree
         for node in tree.nodes:
-            if node.bl_idname == 'NodeReroute' or node.bl_idname == 'NodeFrame':
+            if node.bl_idname in ['NodeReroute', 'NodeFrame']:
                 continue
             if node.isGroupInputNode() or node.isGroupOutputNode() or node.isShaderGroupInputNode() or node.bl_idname == SORTNodeOutput.bl_idname:
                 node.select = False
@@ -881,10 +882,10 @@ class SORT_Node_Group_Ungroup_Operator(bpy.types.Operator):
     def poll(cls, context):
         if context.scene.render.engine != 'SORT':
             return False
-        group_node = context.active_node
-        if not group_node:
+        if group_node := context.active_node:
+            return get_node_groups_by_id(group_node.bl_idname) != None
+        else:
             return False
-        return get_node_groups_by_id(group_node.bl_idname) != None
 
     def execute(self, context):
         # get the picked node by ID
@@ -960,10 +961,7 @@ class SORT_Node_Group_Edit_Operator(bpy.types.Operator):
         space_data = context.space_data
         if len(path) == 1:
             path.start(parent_tree)
-            path.append(group_tree, node=node)
-        else:
-            path.append(group_tree, node=node)
-
+        path.append(group_tree, node=node)
         return {"FINISHED"}
 
 #------------------------------------------------------------------------------------#
@@ -1023,10 +1021,7 @@ class SORTNodeExposedInputs(SORTShadingNode):
         if to_socket is None:
             return
 
-        socket_names = []
-        for output in self.outputs:
-            socket_names.append( output.name )
-
+        socket_names = [output.name for output in self.outputs]
         new_socket_name = getUniqueSocketName( socket_names , to_socket.name )
         replace_socket(last_output, to_socket.bl_idname, new_name=new_socket_name)
 
@@ -1063,19 +1058,21 @@ class SORTNodeExposedInputs(SORTShadingNode):
         for i in range( 0 , len(inputs) ):
             input = inputs[i]
             input_type = socket_type_mapping[input.bl_idname]
-            tsl_shader += input_type + ' ' + self.getShaderInputParameterName(input.name) + ', \n'
+            tsl_shader += (
+                f'{input_type} {self.getShaderInputParameterName(input.name)}'
+                + ', \n'
+            )
         for i in range( 0 , len(inputs) ):
             output = inputs[i]
             output_type = socket_type_mapping[output.bl_idname]
-            tsl_shader += 'out ' + output_type + ' ' + self.getShaderOutputParameterName(output.name)
-            if i < len(inputs) - 1 :
-                tsl_shader += ',\n'
-            else:
-                tsl_shader += '){\n'
-
+            tsl_shader += f'out {output_type} {self.getShaderOutputParameterName(output.name)}'
+            tsl_shader += ',\n' if i < len(inputs) - 1 else '){\n'
         for i in range( 0 , len(inputs) ):
             var_name = inputs[i].name
-            tsl_shader += self.getShaderOutputParameterName(var_name) + ' = ' + self.getShaderInputParameterName(var_name) + ';\n'
+            tsl_shader += (
+                f'{self.getShaderOutputParameterName(var_name)} = {self.getShaderInputParameterName(var_name)}'
+                + ';\n'
+            )
         tsl_shader += '}'
         return tsl_shader
 
@@ -1249,31 +1246,34 @@ class SORTShaderGroupInputsNode(SORTNodeSocketConnectorHelper, SORTShadingNode):
         for output in outputs:
             if output.isDummySocket():
                 continue
-                
+
             if first_arg is False:
                 osl_shader += ',\n'
             first_arg = False
 
             input_type = socket_type_mapping[output.bl_idname]
-            osl_shader += input_type + ' ' + self.getShaderInputParameterName(output.name)
+            osl_shader += f'{input_type} {self.getShaderInputParameterName(output.name)}'
 
         for output in outputs:
             if output.isDummySocket():
                 osl_shader += '){\n'
                 continue
-                
+
             if first_arg is False:
                 osl_shader += ',\n'
             first_arg = False
 
             output_type = socket_type_mapping[output.bl_idname]
-            osl_shader += 'out ' + output_type + ' ' + self.getShaderOutputParameterName(output.name)
-            
+            osl_shader += f'out {output_type} {self.getShaderOutputParameterName(output.name)}'
+
         for output in outputs:
             if output.isDummySocket():
                 continue
             var_name = output.name
-            osl_shader += self.getShaderOutputParameterName(var_name) + ' = ' + self.getShaderInputParameterName(var_name) + ';\n'
+            osl_shader += (
+                f'{self.getShaderOutputParameterName(var_name)} = {self.getShaderInputParameterName(var_name)}'
+                + ';\n'
+            )
         osl_shader += '}'
         return osl_shader
 
@@ -1343,32 +1343,37 @@ class SORTShaderGroupOutputsNode(SORTNodeSocketConnectorHelper, SORTShadingNode)
         for input in inputs:
             if input.isDummySocket():
                 continue
-            
+
             if first_arg is False:
                 osl_shader += ',\n'
             first_arg = False
 
             input_type = socket_type_mapping[input.bl_idname]
-            osl_shader += input_type + ' ' + self.getShaderInputParameterName(input.name)
+            osl_shader += f'{input_type} {self.getShaderInputParameterName(input.name)}'
 
         for input in inputs:
             if input.isDummySocket():
                 osl_shader += '){\n'
                 continue
-                
+
             if first_arg is False:
                 osl_shader += ',\n'
             first_arg = False
 
             input_type = socket_type_mapping[input.bl_idname]
-            osl_shader += 'out ' + input_type + ' ' + self.getShaderOutputParameterName(input.name)
-            
+            osl_shader += (
+                f'out {input_type} {self.getShaderOutputParameterName(input.name)}'
+            )
+                    
 
         for input in inputs:
             if input.isDummySocket():
                 continue
             var_name = input.name
-            osl_shader += self.getShaderOutputParameterName(var_name) + ' = ' + self.getShaderInputParameterName(var_name) + ';\n'
+            osl_shader += (
+                f'{self.getShaderOutputParameterName(var_name)} = {self.getShaderInputParameterName(var_name)}'
+                + ';\n'
+            )
         osl_shader += '}'
         return osl_shader
 
@@ -1393,10 +1398,7 @@ class SORTNode_Material_Diffuse(SORTShadingNode):
         }
     '''
     def update_brdf(self,context):
-        if self.brdf_type == 'OrenNayar':
-            self.inputs['Roughness'].enabled = True
-        else:
-            self.inputs['Roughness'].enabled = False
+        self.inputs['Roughness'].enabled = self.brdf_type == 'OrenNayar'
     brdf_type : bpy.props.EnumProperty(name='Type', items=[('Lambert','Lambert','',1),('OrenNayar','OrenNayar','',2)], default='Lambert', update=update_brdf)
     def init(self, context):
         self.inputs.new( 'SORTNodeSocketColor' , 'Diffuse' )
@@ -1410,12 +1412,11 @@ class SORTNode_Material_Diffuse(SORTShadingNode):
         if self.brdf_type == 'OrenNayar':
             fs.serialize( 3 )
             self.inputs['Roughness'].serialize(fs)
-            self.inputs['Diffuse'].serialize(fs)
-            self.inputs['Normal'].serialize(fs)
         else:
             fs.serialize( 2 )
-            self.inputs['Diffuse'].serialize(fs)
-            self.inputs['Normal'].serialize(fs)
+
+        self.inputs['Diffuse'].serialize(fs)
+        self.inputs['Normal'].serialize(fs)
     def generate_osl_source(self):
         if self.brdf_type == 'Lambert':
             return self.tsl_shader_diffuse
@@ -1783,17 +1784,13 @@ class SORTNode_Material_Measured(SORTShadingNode):
     def generate_osl_source(self):
         return self.tsl_shader_fourier if self.brdf_type == 'FourierBRDF' else self.tsl_shader_merl
     def populateResources( self , resources ):
-        found = False
-        for resource in resources:
-            if resource[1] == self.file_path:
-                found = True
+        found = any(resource[1] == self.file_path for resource in resources)
         if not found:
             self.ResourceIndex = len(resources)
             if self.brdf_type == 'FourierBRDF':
                 resources.append( ( self.file_path , SID('FourierBRDFMeasuredData') ) )
             else:
                 resources.append( ( self.file_path , SID('MerlBRDFMeasuredData') ) )
-        pass
     def serialize_prop(self, fs):
         fs.serialize( 1 )
         self.inputs['Normal'].serialize(fs)
@@ -2373,7 +2370,7 @@ class SORTNodeImage(SORTShadingNode):
         self.outputs['Green'].enabled = self.show_separate_channels
     show_separate_channels : bpy.props.BoolProperty(name='All Channels', default=False, update=toggle_result_channel)
     def generate_preview(self, context):
-        name = self.name + '_' + self.id_data.name
+        name = f'{self.name}_{self.id_data.name}'
         if name not in preview_collections:
             item = bpy.utils.previews.new()
             item.previews = ()
@@ -2382,8 +2379,7 @@ class SORTNodeImage(SORTShadingNode):
         item = preview_collections[name]
         wm = context.window_manager
         enum_items = []
-        img = self.image
-        if img:
+        if img := self.image:
             new_image_name = img.name
             if item.image_name == new_image_name:
                 return item.previews
@@ -2440,7 +2436,6 @@ class SORTNodeImage(SORTShadingNode):
         if not found:
             self.ResourceIndex = len(resources)
             resources.append( ( bpy.path.abspath(self.image.filepath) , SID('Texture2D') ) )
-        pass
     # serialize shader resource data
     def serialize_shader_resource(self, fs):
         fs.serialize(1)
@@ -2715,8 +2710,16 @@ class SORTNodeMathOpUnary(SORTShadingNode):
             dtype = 'vector'
 
         if dtype == 'float':
-            return self.tsl_shader_float % ( self.op_type, self.op_type ) if self.op_type != '-' and self.op_type != '1.0f - ' else self.tsl_shader_float_simple % ( self.op_type )
-        return self.tsl_shader_float3 % ( self.op_type, self.op_type ) if self.op_type != '-' and self.op_type != '1.0f - ' else self.tsl_shader_float3_simple % ( self.op_type )
+            return (
+                self.tsl_shader_float % (self.op_type, self.op_type)
+                if self.op_type not in ['-', '1.0f - ']
+                else self.tsl_shader_float_simple % (self.op_type)
+            )
+        return (
+            self.tsl_shader_float3 % (self.op_type, self.op_type)
+            if self.op_type not in ['-', '1.0f - ']
+            else self.tsl_shader_float3_simple % (self.op_type)
+        )
     def type_identifier(self):
         return self.bl_idname + self.data_type + self.op_type
 

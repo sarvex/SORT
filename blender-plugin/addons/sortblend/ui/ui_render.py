@@ -145,18 +145,18 @@ class RENDER_PT_IntegratorPanel(SORTRenderPanel,bpy.types.Panel):
         data = context.scene.sort_data
         self.layout.prop(data,"integrator_type_prop")
         integrator_type = data.integrator_type_prop
-        if integrator_type != "WhittedRT" and integrator_type != "DirectLight" and integrator_type != "AmbientOcclusion":
+        if integrator_type not in ["WhittedRT", "DirectLight", "AmbientOcclusion"]:
             self.layout.prop(data,"inte_max_recur_depth")
-        if integrator_type == "PathTracing":
-            self.layout.prop(data,"max_bssrdf_bounces" )
         if integrator_type == "AmbientOcclusion":
             self.layout.prop(data,"ao_max_dist")
-        if integrator_type == "BidirPathTracing":
+        elif integrator_type == "BidirPathTracing":
             self.layout.prop(data,"bdpt_mis")
-        if integrator_type == "InstantRadiosity":
+        elif integrator_type == "InstantRadiosity":
             self.layout.prop(data,"ir_light_path_set_num")
             self.layout.prop(data,"ir_light_path_num")
             self.layout.prop(data, "ir_min_dist")
+        elif integrator_type == "PathTracing":
+            self.layout.prop(data,"max_bssrdf_bounces" )
 
 @base.register_class
 class RENDER_PT_AcceleratorPanel(SORTRenderPanel,bpy.types.Panel):
@@ -208,7 +208,7 @@ class SORT_open_log(bpy.types.Operator):
     bl_idname = "sort.open_log"
     bl_label = "Open Log"
     def execute(self, context):
-        logfile = exporter.get_sort_dir() + "log.txt"
+        logfile = f"{exporter.get_sort_dir()}log.txt"
         OpenFile( logfile )
         return {'FINISHED'}
 

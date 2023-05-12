@@ -39,12 +39,14 @@ class SORTParticlePanel(properties_particle.ParticleButtonsPanel):
     @classmethod
     def poll(cls, context):
         psys = context.particle_system
-        engine = context.scene.render.engine
         if psys is None:
             return False
-        if psys.settings is None:
-            return False
-        return psys.settings.type == 'HAIR' and (engine in cls.COMPAT_ENGINES)
+        engine = context.scene.render.engine
+        return (
+            False
+            if psys.settings is None
+            else psys.settings.type == 'HAIR' and (engine in cls.COMPAT_ENGINES)
+        )
 
 @base.register_class
 class HAIR_PT_SORTSettingPanel(SORTParticlePanel, bpy.types.Panel):

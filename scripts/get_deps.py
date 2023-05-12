@@ -45,9 +45,8 @@ if len(sys.argv) > 1:
     if sys.argv[1] == 'TRUE':
         forcing_sync = sys.argv[1]
 
-    if len(sys.argv) > 2:
-        if sys.argv[2] == 'arm64':
-            arch = sys.argv[2]
+    if len(sys.argv) > 2 and sys.argv[2] == 'arm64':
+        arch = sys.argv[2]
 
 # sync a dependency from server
 def sync_dep_utility( url ):
@@ -56,7 +55,7 @@ def sync_dep_utility( url ):
     urllib.request.urlretrieve(get_dep_py_url, syncing_script_file_path)
 
     # sync the dependencies
-    cmd = sys.executable + ' ' + syncing_script_file_path + ' ' + url + ' ' + dep_dir
+    cmd = f'{sys.executable} {syncing_script_file_path} {url} {dep_dir}'
     os.system(cmd)
 
     # remove the useless syncing script
@@ -67,7 +66,7 @@ def get_deps():
     # sync embree
     if sys.platform == 'win32':
         sync_dep_utility('https://raw.githubusercontent.com/JiayinCao/ProjectDependencies/main/SORT/dep_win.txt')
-    elif sys.platform == "linux" or sys.platform == "linux2":
+    elif sys.platform in ["linux", "linux2"]:
         stream = os.popen('lsb_release -sc')
         output = stream.read()
         if output.find('xenial') != -1:
@@ -101,13 +100,10 @@ if __name__ == "__main__":
             shutil.rmtree(dep_dir)
 
         sync_dep = True
+    elif os.path.isdir(dep_dir) is False:
+        sync_dep = True
     else:
-        # this might not be very robust since it just check the folder
-        # if there is a broken dependencies folder, it will fail to build
-        if os.path.isdir(dep_dir) is False:
-            sync_dep = True
-        else:
-            print('Dependencies are up to date, no need to sync.')
+        print('Dependencies are up to date, no need to sync.')
 
     # if we need to sync, do it
     if sync_dep:

@@ -29,9 +29,9 @@ def main():
     for file in files_to_verify:
         if os.path.exists(file) is False:
             missing_build = True
-            print('Missing build ' + file)
+            print(f'Missing build {file}')
         else:
-            os.system('file ' + file)
+            os.system(f'file {file}')
 
     if missing_build:
         sys.exit(1)

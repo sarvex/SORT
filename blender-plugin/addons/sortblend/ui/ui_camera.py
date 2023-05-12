@@ -46,6 +46,6 @@ class CAMERA_PT_SORTDOFPanel(SORTCameraPanel, bpy.types.Panel):
         camera = context.camera
         layout.prop(camera.dof, "focus_object")
         row = layout.row()
-        row.active = ( camera.dof.focus_object == None )
+        row.active = camera.dof.focus_object is None
         row.prop(camera.dof, "focus_distance")
         layout.prop(camera.sort_data, "lens_size")

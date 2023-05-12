@@ -41,14 +41,14 @@ class FileStream(Stream):
     # Serialize data
     def serialize(self,data):
         def serialize_type(data):
-            if type(data).__name__ == 'float' or type(data).__name__ == 'float64':
+            if type(data).__name__ in ['float', 'float64']:
                 self.file.write(struct.pack( 'f' , data ) )
             elif type(data).__name__ == 'int':
                 self.file.write(struct.pack( 'I' , data ))
             elif type(data).__name__ == 'bool':
                 self.file.write(struct.pack( '?' , data ) )
 
-        if type(data).__name__ == 'bytes' or type(data).__name__ == 'bytearray':
+        if type(data).__name__ in ['bytes', 'bytearray']:
             self.file.write(data)
         elif type(data).__name__ == 'str' :
             self.file.write(data.encode('ascii'))

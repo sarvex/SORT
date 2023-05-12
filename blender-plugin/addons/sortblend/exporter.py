@@ -43,10 +43,11 @@ def list_materials( depsgraph ):
         if ob.type == 'MESH':
             for material in ob.data.materials[:]:
                 # make sure it is a SORT material
-                if material and material.sort_material:
-                    # skip if the material is already exported
-                    if exported_materials.count( material ) != 0:
-                        continue
+                if (
+                    material
+                    and material.sort_material
+                    and exported_materials.count(material) == 0
+                ):
                     exported_materials.append( material )
     return exported_materials
 
@@ -55,18 +56,17 @@ def get_sort_dir():
     return_path = preferences.install_path
     if platform.system() == 'Windows':
         return return_path
-    
-    return_path = os.path.expanduser(return_path)
-    return return_path
+
+    return os.path.expanduser(return_path)
 
 def get_sort_bin_path():
     sort_bin_dir = get_sort_dir()
     if platform.system() == 'Darwin':   # for Mac OS
-        sort_bin_path = sort_bin_dir + "sort_r"
-    elif platform.system() == 'Windows':    # for Windows
-        sort_bin_path = sort_bin_dir + "sort_r.exe"
+        sort_bin_path = f"{sort_bin_dir}sort_r"
+    elif platform.system() == 'Windows':# for Windows
+        sort_bin_path = f"{sort_bin_dir}sort_r.exe"
     elif platform.system() == "Linux":
-        sort_bin_path = sort_bin_dir + "sort_r"
+        sort_bin_path = f"{sort_bin_dir}sort_r"
     else:
         raise Exception("SORT is only supported on Windows, Ubuntu and Mac OS")
     return sort_bin_path
@@ -77,10 +77,8 @@ def get_intermediate_dir(force_debug=False):
     return_path = intermediate_dir if force_debug is False else get_sort_dir()
     if platform.system() == 'Windows':
         return_path = return_path.replace( '\\' , '/' )
-        return return_path + '/'
-    if return_path[-1] == '/':
-        return return_path
-    return return_path + '/'
+        return f'{return_path}/'
+    return return_path if return_path[-1] == '/' else f'{return_path}/'
 
 # Coordinate transformation
 # Basically, the coordinate system of Blender and SORT is very different.
@@ -177,9 +175,9 @@ def export_blender(depsgraph, force_debug=False, is_preview=False):
 
     # initialize the file to be fed as main input for the renderer
     # this will potentially be replaced with socket streaming in the future
-    sort_config_file = sort_resource_path + 'scene.sort'
+    sort_config_file = f'{sort_resource_path}scene.sort'
     fs = stream.FileStream( sort_config_file )
-    log("Exporting sort file %s" % sort_config_file)
+    log(f"Exporting sort file {sort_config_file}")
 
     # export global settings for the renderer
     current_time = time()
@@ -407,10 +405,7 @@ def export_scene(depsgraph, is_preview, fs):
 
 # avoid having space in material name
 def name_compat(name):
-    if name is None:
-        return 'None'
-    else:
-        return name.replace(' ', '_')
+    return 'None' if name is None else name.replace(' ', '_')
 
 # export glocal settings for the renderer
 def export_global_config(scene, fs, sort_resource_path):
@@ -421,7 +416,7 @@ def export_global_config(scene, fs, sort_resource_path):
     sort_data = scene.sort_data
 
     integrator_type = sort_data.integrator_type_prop
-    
+
     fs.serialize( 0 )
     fs.serialize( sort_resource_path )
     fs.serialize( int(sort_data.thread_num_prop) )
@@ -436,7 +431,7 @@ def export_global_config(scene, fs, sort_resource_path):
         fs.serialize( int(sort_data.max_bssrdf_bounces) )
     if integrator_type == "AmbientOcclusion":
         fs.serialize( sort_data.ao_max_dist )
-    if integrator_type == "BidirPathTracing" or integrator_type == "LightTracing":
+    if integrator_type in ["BidirPathTracing", "LightTracing"]:
         fs.serialize( bool(sort_data.bdpt_mis) )
     if integrator_type == "InstantRadiosity":
         fs.serialize( sort_data.ir_light_path_set_num )
@@ -505,12 +500,11 @@ def export_mesh(obj, mesh, fs):
     has_uv = bool(mesh.uv_layers)
     uv_layer = None
     if has_uv:
-        active_uv_layer = mesh.uv_layers.active
-        if not active_uv_layer:
-            has_uv = False
-        else:
+        if active_uv_layer := mesh.uv_layers.active:
             uv_layer = active_uv_layer.data
 
+        else:
+            has_uv = False
     # Warning this function seems to cause quite some trouble on MacOS during the first renderer somehow.
     # And this problem only exists on MacOS not the other two OS.
     # Since there is not a low hanging fruit solution for now, it is disabled by default
@@ -556,7 +550,11 @@ def export_mesh(obj, mesh, fs):
             oi.append(out_idx)
 
         matid = -1
-        matname = name_compat(material_names[poly.material_index]) if len( material_names ) > 0 else None
+        matname = (
+            name_compat(material_names[poly.material_index])
+            if material_names
+            else None
+        )
         matid = matname_to_id[matname] if matname in matname_to_id else -1
         if len(oi) == 3:
             # triangle
@@ -573,7 +571,7 @@ def export_mesh(obj, mesh, fs):
             log("Warning, there is unsupported geometry. The exported scene may be incomplete.")
 
     fs.serialize(SID('MeshVisual'))
-    fs.serialize(bool(has_uv))
+    fs.serialize(has_uv)
     fs.serialize(LENFMT.pack(vert_cnt))
     fs.serialize(wo3_verts)
     fs.serialize(LENFMT.pack(primitive_cnt))
@@ -737,14 +735,14 @@ def export_materials(depsgraph, fs):
     materials = list_materials(depsgraph)
     for material in materials:
         # indicating material exporting
-        logD( 'Exporting material %s.' %(material.name) )
+        logD(f'Exporting material {material.name}.')
 
         # get output nodes
         output_node = find_output_node(material)
         if output_node is None:
             logD( 'Material %s doesn\'t have any output node, it is invalid and will be ignored.' %(material.name) )
             continue
-        
+
         # update the material mapping
         compact_material_name = name_compat(material.name)
         matname_to_id[compact_material_name] = i
@@ -827,7 +825,7 @@ def export_materials(depsgraph, fs):
                 shader_group_node_mapping = {}
                 # start from a new visited cache
                 shader_group_node_visited = set()   
-                
+
                 # sub tree for the group nodes
                 sub_tree = shader_node.getGroupTree()
 
@@ -855,7 +853,7 @@ def export_materials(depsgraph, fs):
                     fs.serialize( connection[1] )
                     fs.serialize( connection[2] )
                     fs.serialize( connection[3] )
-                
+
                 # indicate the exposed arguments
                 output_node.serialize_exposed_args(fs)
 
@@ -924,8 +922,8 @@ def export_materials(depsgraph, fs):
             fs.serialize( SID('Invalid Volume Shader') )
 
         # mark whether there is transparent support in the material, this is very important because it will affect performance eventually.
-        fs.serialize( bool(has_transparent_node) )
-        fs.serialize( bool(has_sss_node) )
+        fs.serialize(has_transparent_node)
+        fs.serialize(has_sss_node)
 
         # volume step size and step count
         fs.serialize( material.sort_material.volume_step )

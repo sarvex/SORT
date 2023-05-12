@@ -38,7 +38,9 @@ class SORT_new_material_base(bpy.types.Operator):
         mat = bpy.data.materials.new( 'Material' )
 
         # initialize default sort shader nodes
-        mat.sort_material = bpy.data.node_groups.new( 'SORT_(' + mat.name + ')' , type=material.SORTShaderNodeTree.bl_idname)
+        mat.sort_material = bpy.data.node_groups.new(
+            f'SORT_({mat.name})', type=material.SORTShaderNodeTree.bl_idname
+        )
 
         output = mat.sort_material.nodes.new('SORTNodeOutput')
         default = mat.sort_material.nodes.new('SORTNode_Material_Diffuse')
@@ -106,7 +108,9 @@ class SORT_OT_use_sort_node(bpy.types.Operator):
 
     def execute(self, context):
         mat = context.material
-        mat.sort_material = bpy.data.node_groups.new( 'SORT_(' + mat.name + ')' , type=material.SORTShaderNodeTree.bl_idname)
+        mat.sort_material = bpy.data.node_groups.new(
+            f'SORT_({mat.name})', type=material.SORTShaderNodeTree.bl_idname
+        )
 
         output = mat.sort_material.nodes.new('SORTNodeOutput')
         default = mat.sort_material.nodes.new('SORTNode_Material_Diffuse')
@@ -272,7 +276,7 @@ class MATERIAL_PT_MaterialParameterPanel(SORTMaterialPanel, bpy.types.Panel):
     bl_label = 'Material Parameters'
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         return context.material is not None and SORTMaterialPanel.poll(context)
 
     def draw(self, context):
@@ -301,7 +305,7 @@ class MATERIAL_PT_MaterialVolumePanel(SORTMaterialPanel, bpy.types.Panel):
     bl_label = 'Volume'
 
     @classmethod
-    def poll(self, context):
+    def poll(cls, context):
         return context.material is not None and SORTMaterialPanel.poll(context)
 
     def draw(self, context):
@@ -325,10 +329,10 @@ class MATERIAL_PT_SORTInOutGroupEditor(SORTMaterialPanel, bpy.types.Panel):
 
     @classmethod
     def poll(cls, context):
-        tree = context.space_data.edit_tree
-        if not tree:
+        if tree := context.space_data.edit_tree:
+            return tree.bl_idname == material.SORTShaderNodeTree.bl_idname and SORTMaterialPanel.poll(context)
+        else:
             return False
-        return tree.bl_idname == material.SORTShaderNodeTree.bl_idname and SORTMaterialPanel.poll(context)
 
     def draw(self, context):
         def set_attrs(cls, **kwargs):

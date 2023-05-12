@@ -25,20 +25,15 @@ from file_generator import fabric_brdf_lut, multi_scattering_lut
 sort_dir = os.getcwd()
 
 # set the current directory as the generated source directory
-sort_generated_src_dir = sort_dir + '/generated_src'
+sort_generated_src_dir = f'{sort_dir}/generated_src'
 
-# if there is a second argument check what it is
-allowremoving = False
-if len(sys.argv) > 1:
-    if sys.argv[1] == "force":
-        allowremoving = True
-
+allowremoving = len(sys.argv) > 1 and sys.argv[1] == "force"
 # check if the folder already exists, if it does, remove it
 if os.path.isdir(sort_generated_src_dir):
     if allowremoving:
         print('Source files are being regenerated.')
 
-        files = glob.glob(sort_generated_src_dir + '/*')
+        files = glob.glob(f'{sort_generated_src_dir}/*')
         for f in files:
             os.remove(f)
 else:
